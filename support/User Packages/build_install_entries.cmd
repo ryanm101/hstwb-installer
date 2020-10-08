@@ -1,2 +1,2 @@
-powershell -ExecutionPolicy Bypass -File build_install_entries.ps1 -userPackagesDir "."
+powershell -ExecutionPolicy Bypass -Command ". ./build_install_entries.ps1; Build-InstallEntites -userPackagesDir '.'"
 pause

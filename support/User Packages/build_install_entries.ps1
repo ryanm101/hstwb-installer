@@ -6,16 +6,13 @@
 #
 # A powershell script to build install entries script for HstWB Installer user packages.
 
-
-Param(
-	[Parameter(Mandatory=$true)]
-	[string]$userPackagesDir
-)
-
-
 # get index name from first character in name
-function GetIndexName($name)
+function GetIndexName()
 {
+    Param(
+        [Parameter(Mandatory=$false)]
+        [string]$name
+    )
     if (!$name -or $name -match '^\s*$')
     {
         return "_";
@@ -864,119 +861,128 @@ function WriteEntriesList()
         export-csv -delimiter ';' -path $entriesFile -NoTypeInformation -Encoding UTF8
 }
 
-# write build install entries title
-Write-Output "---------------------"
-Write-Output "Build Install Entries"
-Write-Output "---------------------"
-Write-Output "Author: Henrik Noerfjand Stengaard"
-Write-Output "Date: 2019-10-30"
-Write-Output ""
 
-# resolve paths
-$userPackagesDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($userPackagesDir)
-
-# fail, if user packages directory doesn't exist
-if (!(Test-Path $userPackagesDir))
+function Build-InstallEntites() 
 {
-    throw ("User packages directory '{0}' doesn't exist" -f $userPackagesDir)
-}
+    Param(
+	[Parameter(Mandatory=$true)]
+	[string]$userPackagesDir
+    )
 
-# write user packages directory
-Write-Output ("User packages directory: '{0}'" -f $userPackagesDir)
-Write-Output ""
-Write-Output "Building install scripts for user package directories:"
+    # write build install entries title
+    Write-Output "---------------------"
+    Write-Output "Build Install Entries"
+    Write-Output "---------------------"
+    Write-Output "Author: Henrik Noerfjand Stengaard"
+    Write-Output "Date: 2019-10-30"
+    Write-Output ""
 
-# find user package directories
-$userPackageDirs = @()
-$userPackageDirs += Get-ChildItem -Path $userPackagesDir | Where-Object { $_.PSIsContainer -and (Test-Path (Join-Path $_.FullName -ChildPath '_installdir')) }
+    # resolve paths
+    $userPackagesDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($userPackagesDir)
 
-# exit, if no user package directories was found
-if ($userPackageDirs.Count -eq 0)
-{
-    Write-Output "No user package directories was not found!"
-    exit
-}
-
-# unlzx file
-$unlzxFile = Join-Path $userPackagesDir -ChildPath 'unlzx'
-
-# build install entries for user package directories
-foreach($userPackageDir in $userPackageDirs)
-{
-    # get user package name
-    $userPackageName = $userPackageDir.Name
-    Write-Output $userPackageName
-    Write-Output '- Finding entries...'
-
-    # find entries in pack directory
-    $entries = @()
-    $entries += FindEntries $userPackageDir.FullName
-    Write-Output ("- Found {0} entries." -f $entries.Count)
-
-    # skip user package directory, if it's doesnt contain any entries
-    if ($entries.Count -eq 0)
+    # fail, if user packages directory doesn't exist
+    if (!(Test-Path $userPackagesDir))
     {
-        continue
+        throw ("User packages directory '{0}' doesn't exist" -f $userPackagesDir)
     }
 
-    # copy unlzx to user package directory, if unlzx file exists
-    if (Test-Path $unlzxFile)
+    # write user packages directory
+    Write-Output ("User packages directory: '{0}'" -f $userPackagesDir)
+    Write-Output ""
+    Write-Output "Building install scripts for user package directories:"
+
+    # find user package directories
+    $userPackageDirs = @()
+    $userPackageDirs += Get-ChildItem -Path $userPackagesDir | Where-Object { $_.PSIsContainer -and (Test-Path (Join-Path $_.FullName -ChildPath '_installdir')) }
+
+    # exit, if no user package directories was found
+    if ($userPackageDirs.Count -eq 0)
     {
-        Copy-Item $unlzxFile $userPackageDir.FullName
+        Write-Output "No user package directories was not found!"
+        exit
     }
 
-    # build install entries in user package directory
-    Write-Output ("- Building install entries...")
+    # unlzx file
+    $unlzxFile = Join-Path $userPackagesDir -ChildPath 'unlzx'
 
-    # build best versions
-    $entriesBestVersion = BuildEntriesBestVersion $entries $false
-    $entriesBestVersionLowMem = BuildEntriesBestVersion $entries $true
-
-    # entries sets
-    $entriesSets = @(
-        @{
-            'Name' = 'All';
-            'Description' = 'Install all entries.';
-            'Entries' = $entries
-        },
-        @{
-            'Name' = 'Best-Version';
-            'Description' = 'Install best version of identical entries.';
-            'Entries' = $entriesBestVersion
-        },
-        @{
-            'Name' = 'Best-Version-Lowmem';
-            'Description' = 'Install best version of identical entries for low mem Amigas.';
-            'Entries' = $entriesBestVersionLowMem
-        })
-
-    # build user package install
-    BuildUserPackageInstall $entriesSets $userPackageName $userPackageDir.FullName
-
-    # create user package install directory, if it doesn't exist
-    $userPackageInstallDir = Join-Path $userPackageDir.FullName -ChildPath "Install"
-    if (!(Test-Path -Path $userPackageInstallDir))
+    # build install entries for user package directories
+    foreach($userPackageDir in $userPackageDirs)
     {
-        mkdir -Path $userPackageInstallDir | Out-Null
-    }
+        # get user package name
+        $userPackageName = $userPackageDir.Name
+        Write-Output $userPackageName
+        Write-Output '- Finding entries...'
 
-    # build install entries for entries sets
-    foreach ($entriesSet in $entriesSets)
-    {
-        # create install entries directory, if it doesn't exist
-        $installEntriesDir = Join-Path $userPackageInstallDir -ChildPath $entriesSet.Name
-        if (!(Test-Path -Path $installEntriesDir))
+        # find entries in pack directory
+        $entries = @()
+        $entries += FindEntries $userPackageDir.FullName
+        Write-Output ("- Found {0} entries." -f $entries.Count)
+
+        # skip user package directory, if it's doesnt contain any entries
+        if ($entries.Count -eq 0)
         {
-            mkdir -Path $installEntriesDir | Out-Null
+            continue
         }
 
-        # build install entries
-        BuildInstallEntries $userPackageName $entriesSet.Entries ("Install/{0}" -f $entriesSet.Name) $installEntriesDir
+        # copy unlzx to user package directory, if unlzx file exists
+        if (Test-Path $unlzxFile)
+        {
+            Copy-Item $unlzxFile $userPackageDir.FullName
+        }
 
-        # write entries list
-        $entriesListFile = Join-Path -Path $userPackageDir.FullName -ChildPath ("entries-{0}.csv" -f $entriesSet.Name.ToLower())
-        WriteEntriesList $entriesListFile $entriesSet.Entries
+        # build install entries in user package directory
+        Write-Output ("- Building install entries...")
+
+        # build best versions
+        $entriesBestVersion = BuildEntriesBestVersion $entries $false
+        $entriesBestVersionLowMem = BuildEntriesBestVersion $entries $true
+
+        # entries sets
+        $entriesSets = @(
+            @{
+                'Name' = 'All';
+                'Description' = 'Install all entries.';
+                'Entries' = $entries
+            },
+            @{
+                'Name' = 'Best-Version';
+                'Description' = 'Install best version of identical entries.';
+                'Entries' = $entriesBestVersion
+            },
+            @{
+                'Name' = 'Best-Version-Lowmem';
+                'Description' = 'Install best version of identical entries for low mem Amigas.';
+                'Entries' = $entriesBestVersionLowMem
+            })
+
+        # build user package install
+        BuildUserPackageInstall $entriesSets $userPackageName $userPackageDir.FullName
+
+        # create user package install directory, if it doesn't exist
+        $userPackageInstallDir = Join-Path $userPackageDir.FullName -ChildPath "Install"
+        if (!(Test-Path -Path $userPackageInstallDir))
+        {
+            mkdir -Path $userPackageInstallDir | Out-Null
+        }
+
+        # build install entries for entries sets
+        foreach ($entriesSet in $entriesSets)
+        {
+            # create install entries directory, if it doesn't exist
+            $installEntriesDir = Join-Path $userPackageInstallDir -ChildPath $entriesSet.Name
+            if (!(Test-Path -Path $installEntriesDir))
+            {
+                mkdir -Path $installEntriesDir | Out-Null
+            }
+
+            # build install entries
+            BuildInstallEntries $userPackageName $entriesSet.Entries ("Install/{0}" -f $entriesSet.Name) $installEntriesDir
+
+            # write entries list
+            $entriesListFile = Join-Path -Path $userPackageDir.FullName -ChildPath ("entries-{0}.csv" -f $entriesSet.Name.ToLower())
+            WriteEntriesList $entriesListFile $entriesSet.Entries
+        }
+
+        Write-Output ("- Done.")
     }
-
-    Write-Output ("- Done.")
 }
